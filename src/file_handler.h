@@ -2,18 +2,18 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <vector>
 
+namespace sfe {
+using std::optional;
 using std::vector;
-using bytes = vector<uint8_t>;
-
 using std::filesystem::path;
 
-class FileHandler {
-public:
-  FileHandler() = default;
-  static bytes read_file(const path &);
-  static bool write_file(const path &, const bytes &);
+/// Read file content from disk into bytes
+auto read_file(const path &) -> optional<vector<uint8_t>>;
 
-  bytes content;
-};
+/// Write bytes onto disk
+auto write_file(const path &, const vector<uint8_t> &) -> bool;
+
+}; // namespace sfe
