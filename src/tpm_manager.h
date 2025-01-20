@@ -2,8 +2,10 @@
 
 #include <string>
 #include <tss2/tss2_esys.h>
+#include <vector>
 
 using std::string;
+using std::vector;
 
 namespace sfe {
 
@@ -15,7 +17,8 @@ public:
   /// Generate a primary key (RSA) and store its handle
   auto generate_primary_key(const string &) -> bool;
   /// Seal AES key inside the TPM
-  auto seal_key(const string &) -> bool;
+  auto seal_key(const vector<uint8_t> &, string &sealed_private_path,
+                string &sealed_public_path) -> bool;
   auto unseal_key(const string &) -> bool;
 
 private:
