@@ -1,4 +1,4 @@
-#include "CryptoEngine.h"
+#include "crypto_engine.h"
 
 #include <iostream>
 
@@ -13,7 +13,7 @@ CryptoEngine::~CryptoEngine()
         EVP_CIPHER_CTX_free(ctx);
 }
 
-optional<Bytes> CryptoEngine::encrypt_data(Bytes const& plaintext, Bytes const& key)
+optional<Bytes> CryptoEngine::encrypt(Bytes const& plaintext, Bytes const& key)
 {
     Bytes ciphertext;
 
@@ -21,7 +21,10 @@ optional<Bytes> CryptoEngine::encrypt_data(Bytes const& plaintext, Bytes const& 
         return std::nullopt;
 
     Bytes iv(AES_BLOCK_SIZE, 0);
-    if (1 != EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key.data(), iv.data())) {
+
+    auto encrypt_init = EVP_EncryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key.data(), iv.data());
+    bool encrypt_init_failed = 1 != encrypt_init;
+    if (encrypt_init_failed) {
         std::cerr << "EVP_EncryptInit_ex failed\n";
         return std::nullopt;
     }
@@ -29,14 +32,20 @@ optional<Bytes> CryptoEngine::encrypt_data(Bytes const& plaintext, Bytes const& 
     ciphertext.resize(plaintext.size() + AES_BLOCK_SIZE);
     int len = 0, ciphertext_len = 0;
 
-    if (1 != EVP_EncryptUpdate(ctx, ciphertext.data(), &len, plaintext.data(), static_cast<int>(plaintext.size()))) {
+    auto encrypt_update = EVP_EncryptUpdate(ctx, ciphertext.data(), &len, plaintext.data(), static_cast<int>(plaintext.size()));
+    bool encrypt_update_failed = 1 != encrypt_update;
+
+    if (encrypt_init_failed) {
         std::cerr << "EVP_EncryptUpdate failed\n";
         return std::nullopt;
     }
 
     ciphertext_len = len;
 
-    if (1 != EVP_EncryptFinal_ex(ctx, ciphertext.data() + len, &len)) {
+    auto encrypt_final = EVP_EncryptFinal_ex(ctx, ciphertext.data() + len, &len);
+    bool encrypt_final_failed = 1 != encrypt_final;
+
+    if (encrypt_final_failed) {
         std::cerr << "EVP_EncryptFinal_ex failed\n";
         return std::nullopt;
     }
@@ -47,7 +56,7 @@ optional<Bytes> CryptoEngine::encrypt_data(Bytes const& plaintext, Bytes const& 
     return ciphertext;
 }
 
-optional<Bytes> CryptoEngine::decrypt_data(Bytes const& ciphertext, Bytes const& key)
+optional<Bytes> CryptoEngine::decrypt(Bytes const& ciphertext, Bytes const& key)
 {
     int len = 0, plaintext_len = 0;
     Bytes plaintext;
@@ -57,20 +66,35 @@ optional<Bytes> CryptoEngine::decrypt_data(Bytes const& ciphertext, Bytes const&
 
     Bytes iv(AES_BLOCK_SIZE, 0);
 
-    if (1 != EVP_DecryptInit_ex(ctx, EVP_aes_256_cbc(), nullptr, key.data(), iv.data())) {
+    auto decrypt_init = EVP_DecryptInit_ex(
+        ctx, EVP_aes_256_cbc(),
+        nullptr, key.data(), iv.data());
+
+    bool decrypt_init_failed = 1 != decrypt_init;
+
+    if (decrypt_init_failed) {
         std::cerr << "EVP_DecryptInit_ex failed\n";
         return std::nullopt;
     }
 
     plaintext.resize(ciphertext.size());
 
-    if (1 != EVP_DecryptUpdate(ctx, plaintext.data(), &len, ciphertext.data(), static_cast<int>(ciphertext.size()))) {
+    auto decrypt_updated = EVP_DecryptUpdate(
+        ctx, plaintext.data(), &len,
+        ciphertext.data(), static_cast<int>(ciphertext.size()));
+
+    bool decrypt_update_failed = 1 != decrypt_updated;
+
+    if (decrypt_update_failed) {
         std::cerr << "EVP_DecryptUpdate failed\n";
         return std::nullopt;
     }
     plaintext_len = len;
 
-    if (1 != EVP_DecryptFinal_ex(ctx, plaintext.data() + len, &len)) {
+    auto decrypt_final = EVP_DecryptFinal_ex(ctx, plaintext.data() + len, &len);
+    bool decrypt_final_failed = 1 != decrypt_final;
+
+    if (decrypt_final_failed) {
         std::cerr << "EVP_DecryptFinal_ex failed\n";
         return std::nullopt;
     }

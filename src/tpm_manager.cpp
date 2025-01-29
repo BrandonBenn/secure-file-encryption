@@ -4,7 +4,7 @@
  * https://github.com/tpm2-software/tpm2-tss/blob/master/include/tss2/tss2_tpm2_types.h#L1762
  */
 
-#include "TpmManager.h"
+#include "tpm_manager.h"
 #include <cstring>
 #include <fstream>
 #include <ios>
@@ -29,9 +29,8 @@ TpmManager::TpmManager(
 TpmManager::~TpmManager()
 {
     // If created a primary key, flush it from TPM memory
-    if (primary_handle != ESYS_TR_NONE && ctx) {
+    if (not_initialized()) {
         TSS2_RC rc = Esys_FlushContext(ctx, primary_handle);
-
         if (rc != TSS2_RC_SUCCESS) {
             std::cerr << "Esys_FlushContext failed: 0x" << std::hex << rc << std::dec
                       << std::endl;
@@ -55,8 +54,10 @@ TpmManager::~TpmManager()
 
 bool TpmManager::generate_primary_key(string const& key_label)
 {
-    if (!ctx)
+    if (not_initialized()) {
+        std::cerr << "TPM context is not initialized";
         return false;
+    }
 
     TPM2B_SENSITIVE_CREATE in_sensitive;
     memset(&in_sensitive, 0, sizeof(in_sensitive));
@@ -107,7 +108,7 @@ bool TpmManager::generate_primary_key(string const& key_label)
     return true;
 }
 
-bool TpmManager::seal_key(Bytes const& secret_data)
+bool TpmManager::seal(Bytes const& secret_data)
 {
     if (not_initialized()) {
         std::cerr << "TPM context is not initialized";
@@ -119,7 +120,8 @@ bool TpmManager::seal_key(Bytes const& secret_data)
     memset(&in_sensitive, 0, sizeof(in_sensitive));
 
     // copy secret_data into the data field
-    if (secret_data.size() > sizeof(in_sensitive.sensitive.data.buffer)) {
+    bool is_secret_too_large = secret_data.size() > sizeof(in_sensitive.sensitive.data.buffer);
+    if (is_secret_too_large) {
         std::cerr << "Secret too large to seal.\n";
         return false;
     }
@@ -190,6 +192,105 @@ bool TpmManager::seal_key(Bytes const& secret_data)
             out_public->publicArea.unique.keyedHash.size);
 
         pub_file.close();
+    }
+
+    return true;
+}
+
+bool TpmManager::unseal(Bytes const& unsealed_data)
+{
+    std::ifstream priv_file(sealed_private_path, std::ios::binary);
+    if (not priv_file) {
+        std::cerr << "Cannot open private data file: " << sealed_private_path << '\n';
+        return false;
+    }
+
+    Bytes private_buf((std::istreambuf_iterator<char>(priv_file)), (std::istreambuf_iterator<char>()));
+    priv_file.close();
+
+    std::ifstream pub_file(sealed_public_path);
+    if (not pub_file) {
+        std::cerr << "Cannot open public data file: " << sealed_public_path << '\n';
+        return false;
+    }
+
+    Bytes public_buf((std::istreambuf_iterator<char>(pub_file)), (std::istreambuf_iterator<char>()));
+    pub_file.close();
+
+    TPM2B_PRIVATE in_private;
+    TPM2B_PUBLIC in_public;
+    memset(&in_private, 0, sizeof(in_private));
+    memset(&in_public, 0, sizeof(in_public));
+
+    bool priv_buf_too_large = (private_buf.size() > sizeof(in_private.buffer));
+    if (priv_buf_too_large) {
+        std::cerr << "Privaate blob size too large.\n";
+        return false;
+    }
+
+    in_private.size = private_buf.size();
+    memcpy(in_private.buffer, private_buf.data(), private_buf.size());
+
+    in_public.publicArea.type = TPM2_ALG_KEYEDHASH;
+    in_public.publicArea.nameAlg = TPM2_ALG_SHA256;
+    in_public.publicArea.objectAttributes = (TPMA_OBJECT_FIXEDTPM | TPMA_OBJECT_FIXEDPARENT | TPMA_OBJECT_SENSITIVEDATAORIGIN | TPMA_OBJECT_USERWITHAUTH | TPMA_OBJECT_NODA);
+    in_public.publicArea.parameters.keyedHashDetail.scheme.scheme = TPM2_ALG_NULL;
+
+    bool public_buf_too_large = public_buf.size() > sizeof(in_public.publicArea.unique.keyedHash.buffer);
+    if (public_buf_too_large) {
+        std::cerr << "Public blob size too large.\n";
+        return false;
+    }
+
+    ESYS_TR sealed_handle = ESYS_TR_NONE;
+    TSS2_RC rc = Esys_Load(
+        ctx,
+        primary_handle,
+        ESYS_TR_PASSWORD,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &in_private,
+        &in_public,
+        &sealed_handle);
+
+    if (rc != TSS2_RC_SUCCESS) {
+        std::cerr << "Esys_Load failed: 0x" << std::hex << rc << std::dec << std::endl;
+        return false;
+    }
+
+    // (4) Esys_Unseal
+    TPM2B_SENSITIVE_DATA* out_data = nullptr;
+    rc = Esys_Unseal(
+        ctx,
+        sealed_handle,
+        ESYS_TR_PASSWORD,
+        ESYS_TR_NONE,
+        ESYS_TR_NONE,
+        &out_data);
+
+    if (rc != TSS2_RC_SUCCESS) {
+        std::cerr << "Esys_Unseal failed: 0x" << std::hex << rc << std::dec << std::endl;
+        // Make sure to flush the handle
+        Esys_FlushContext(ctx, sealed_handle);
+        return false;
+    }
+
+    // (5) Copy the unsealed secret to our output
+    // unsealed_data.resize(out_data->size);
+    // unsealed_data.emplace_back
+
+    // memcpy(unsealed_data.data(), out_data->buffer, out_data->size);
+
+    std::cout << "Successfully unsealed data. Size: " << out_data->size << " bytes\n";
+
+    // (6) Cleanup
+    Esys_Free(&out_data);
+
+    rc = Esys_FlushContext(ctx, sealed_handle);
+    if (rc != TSS2_RC_SUCCESS) {
+        std::cerr << "Esys_FlushContext failed on sealed object handle: 0x"
+                  << std::hex << rc << std::dec << std::endl;
+        return false;
     }
 
     return true;

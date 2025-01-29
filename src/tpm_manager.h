@@ -1,18 +1,19 @@
 #pragma once
 
-#include "Types.h"
+#include "types.h"
 
 #include <tss2/tss2_esys.h>
 
 class TpmManager {
 public:
+    TpmManager();
     TpmManager(string const&, string const&);
     ~TpmManager();
     /// Generate a primary key (RSA) and store its handle
     bool generate_primary_key(string const&);
     /// Seal AES key inside the TPM
-    bool seal_key(Bytes const&);
-    bool unseal_key(string const&);
+    bool seal(Bytes const&);
+    bool unseal(Bytes const&);
 
 private:
     bool not_initialized();

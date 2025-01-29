@@ -16,28 +16,11 @@ FetchContent_MakeAvailable(catch2)
 find_package(OpenSSL REQUIRED)
 
 # Define the sources and headers
-set(SOURCES src/merkletree.cpp)
-set(HEADERS src/merkletree.h)
+set(SOURCES
+  src/crypto_engine.cpp
+  src/file_handler.cpp
+  src/tpm_manager.cpp
+)
 
-add_executable(irow src/main.cpp ${SOURCES} ${HEADERS})
-target_link_libraries(irow OpenSSL::SSL OpenSSL::Crypto)
-
-option(BUILD_TESTS "Build tests" ON)
-if(BUILD_TESTS)
-    message(STATUS "Building tests")
-    add_executable(tests src/merkletree_test.cpp ${SOURCES} ${HEADERS})
-
-    # Include Catch2 headers for the test target
-    target_include_directories(tests PRIVATE ${catch2_SOURCE_DIR}/src)
-
-    # Link dependencies to the test executable
-    target_link_libraries(tests PRIVATE
-        Catch2::Catch2
-        OpenSSL::SSL
-        OpenSSL::Crypto
-    )
-    
-    # Enable testing
-    enable_testing()
-    add_test(NAME tests COMMAND tests)
-endif()
+add_executable(sfe src/main.cpp ${SOURCES})
+target_link_libraries(sfe OpenSSL::SSL OpenSSL::Crypto)

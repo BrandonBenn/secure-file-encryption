@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Types.h"
+#include "types.h"
 
 class FileHandler {
 public:
@@ -10,7 +10,8 @@ public:
 
     /// Write bytes onto disk
     bool write(Bytes const&);
+    string filename();
 
 private:
-    path const filename;
+    path const file;
 };

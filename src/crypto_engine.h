@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Types.h"
+#include "types.h"
 
 #include <openssl/evp.h>
 #include <optional>
@@ -12,10 +12,10 @@ public:
     ~CryptoEngine();
 
     /// Take plaintext and key, return ciphertext
-    optional<Bytes> encrypt_data(Bytes const&, Bytes const&);
+    optional<Bytes> encrypt(Bytes const&, Bytes const&);
 
     /// Take ciphertext and key, return plaintext
-    optional<Bytes> decrypt_data(Bytes const&, Bytes const&);
+    optional<Bytes> decrypt(Bytes const&, Bytes const&);
 
 private:
     EVP_CIPHER_CTX* ctx;
